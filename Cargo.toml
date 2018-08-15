@@ -1,0 +1,6 @@
+[package]
+name = "zeppelin2jupyter"
+version = "0.1.0"
+authors = ["nykh <nhuang@sumologic.com>"]
+
+[dependencies]

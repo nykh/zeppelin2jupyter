@@ -1,6 +1,9 @@
 extern crate clap;
+extern crate failure;
 
 use clap::{Arg, App};
+
+mod converter;
 
 trait FilenameManipulator {
     fn replace_extension(&self, new_ext: &str) -> String;
@@ -37,6 +40,13 @@ fn main() {
     let dst = matches.value_of("dst")
                 .map(String::from)
                 .unwrap_or(src.replace_extension("ipynb"));
-    println!("src={}", &src);
-    println!("dst={}", &dst);
+
+    if matches.values_of("dst").is_none() {
+        println!("Writing to {}...", &dst);
+    } 
+
+    match converter::convert(&src, &dst) {
+        Ok(()) => (),
+        Err(e) => { println!("{}", e); () }
+    }
 }

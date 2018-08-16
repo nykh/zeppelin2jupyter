@@ -23,6 +23,10 @@ fn write_file(path: &str, content: &String) -> Result<(), Error> {
 }
 
 /// Converts a zeppelin json to a jupyter json
+/// 
+/// # Transform rules
+/// 
+/// see `rules.md`
 fn convert_json(z: &Value) -> Value {
     panic!("Not implmeneted")
 }

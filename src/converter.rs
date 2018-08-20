@@ -12,6 +12,7 @@ type ZeppelinJson = Value;
 type JupyterCell = Value;
 type ZeppelinCell = Value;
 type ValArray = Value;
+type ValString = Value;
 
 
 fn read_file(path: &str) -> Result<String, Error> {
@@ -43,8 +44,8 @@ fn optionally_insert_title_node(z: &ZeppelinCell) -> Vec<JupyterCell> {
     }
 }
 
-fn multiline_string_to_lines(s: &str) -> ValArray {
-    let lines: Vec<&str> = s.rsplitn(2, '\n').collect();
+fn multiline_string_to_lines(s: &ValString) -> ValArray {
+    let lines: Vec<&str> = s.as_str().unwrap().rsplitn(2, '\n').collect();
     let mut s2 = lines.get(1)
                       .map_or(Vec::new(), 
                               |s| s.lines().map(|line| {
@@ -58,13 +59,13 @@ fn multiline_string_to_lines(s: &str) -> ValArray {
     Value::Array(s2.into_iter().map(|s| Value::String(s)).collect())
 }
 
-fn convert_outputs(zouts: &Vec<Value>) -> ValArray {
+fn convert_outputs(zouts: &ValArray) -> ValArray {
     let mut jouts = Vec::new();
-    for out in zouts {
+    for out in zouts.as_array().unwrap_or(&Vec::new()) {
         let o = out.as_object().unwrap();
         match o["type"].as_str() {
             Some("TEXT") => {
-                let text = multiline_string_to_lines(o["data"].as_str().unwrap());
+                let text = multiline_string_to_lines(&o["data"]);
                 jouts.push(json!({
                     "name": "stdout",
                     "output_type": "stream",
@@ -81,8 +82,8 @@ fn convert_outputs(zouts: &Vec<Value>) -> ValArray {
 /// Convert a single cell
 fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
     let mut output = optionally_insert_title_node(z);
-    let source = multiline_string_to_lines(z["text"].as_str().unwrap());
-    let outputs = convert_outputs(z["results"]["msg"].as_array().unwrap_or(&Vec::new()));
+    let source = multiline_string_to_lines(&z["text"]);
+    let outputs = convert_outputs(&z["results"]["msg"]);
 
     output.push(json!({
       "cell_type": "code",
@@ -137,7 +138,7 @@ mod tests {
     use super::*;
     #[test]
     fn multiline_string_to_lines_works_on_null_case() {
-        let lines = multiline_string_to_lines("");
+        let lines = multiline_string_to_lines(&json!(""));
         let lines_vec = lines.as_array().unwrap();
         assert_eq!(lines_vec.len(), 1);
         assert_eq!(lines_vec[0], "");
@@ -145,7 +146,7 @@ mod tests {
 
     #[test]
     fn multiline_string_to_lines_works_on_simple_case() {
-        let lines = multiline_string_to_lines("Hello\nWorld\nMan");
+        let lines = multiline_string_to_lines(&json!("Hello\nWorld\nMan"));
         let lines_vec = lines.as_array().unwrap();
         assert_eq!(lines_vec.len(), 3);
         assert_eq!(lines_vec[0], "Hello\n");
@@ -155,17 +156,17 @@ mod tests {
 
     #[test]
     fn convert_outputs_works_on_null_case() {
-        let outs = convert_outputs(&Vec::new());
+        let outs = convert_outputs(&json!([]));
         let outs_vec = outs.as_array().unwrap();
         assert_eq!(outs_vec.len(), 0);
     }
 
     #[test]
     fn convert_outputs_works_on_simple_case() {
-        let outs = convert_outputs(&vec!(json!({
+        let outs = convert_outputs(&json!([{
                                     "type": "TEXT",
                                     "data": "simple\nmulti-line\nstring"
-                                    })));
+                                    }]));
         let outs_vec = outs.as_array().unwrap();
         assert_eq!(outs_vec.len(), 1);
         assert_eq!(outs_vec[0]["name"].as_str(), Some("stdout"));

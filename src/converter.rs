@@ -59,7 +59,10 @@ fn multiline_string_to_lines(s: &ValString) -> ValArray {
     Value::Array(s2.into_iter().map(|s| Value::String(s)).collect())
 }
 
-fn convert_outputs(zouts: &ValArray) -> ValArray {
+const IMAGE_PREFIX: &'static str = "<div style='width:auto;height:auto'><img src=data:image/png;base64,";
+const IMAGE_POSTFIX: &'static str = " style='width=auto;height:auto'><div>\n";
+
+fn convert_codecell_outputs(zouts: &ValArray) -> ValArray {
     let mut jouts = Vec::new();
     for out in zouts.as_array().unwrap_or(&Vec::new()) {
         let o = out.as_object().unwrap();
@@ -72,8 +75,24 @@ fn convert_outputs(zouts: &ValArray) -> ValArray {
                     "text": text
                 }))
             },
-            Some(&_) => (),
-            None => ()
+            Some("HTML") => {
+                // Markdown is ruled out
+                let data = o["data"].as_str().unwrap();
+                if &data[..IMAGE_PREFIX.len()] == IMAGE_PREFIX {
+                    let mut image: String = data.chars().skip(IMAGE_PREFIX.len()).collect();
+                    let newlen = image.len() - IMAGE_POSTFIX.len();
+                    image.truncate(newlen);
+                    jouts.push(json!({
+                        "data": {
+                            "image/png": Value::String(image),
+                            "text/plain": []
+                        },
+                        "metadata": {},
+                        "output_type": "display_data"
+                    }))
+                }
+            }
+            Some(&_) | None => (),
         }
     }
     Value::Array(jouts)
@@ -94,7 +113,7 @@ fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
         Some(&_) | None => {
             let mut output = optionally_insert_title_node(z);
             let source = multiline_string_to_lines(&z["text"]);
-            let outputs = convert_outputs(&z["results"]["msg"]);
+            let outputs = convert_codecell_outputs(&z["results"]["msg"]);
 
             output.push(json!({
             "cell_type": "code",
@@ -169,14 +188,14 @@ mod tests {
 
     #[test]
     fn convert_outputs_works_on_null_case() {
-        let outs = convert_outputs(&json!([]));
+        let outs = convert_codecell_outputs(&json!([]));
         let outs_vec = outs.as_array().unwrap();
         assert_eq!(outs_vec.len(), 0);
     }
 
     #[test]
     fn convert_outputs_works_on_simple_case() {
-        let outs = convert_outputs(&json!([{
+        let outs = convert_codecell_outputs(&json!([{
                                     "type": "TEXT",
                                     "data": "simple\nmulti-line\nstring"
                                     }]));

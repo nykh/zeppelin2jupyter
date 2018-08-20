@@ -63,11 +63,14 @@ fn convert_outputs(zouts: &Vec<Value>) -> ValArray {
     for out in zouts {
         let o = out.as_object().unwrap();
         match o["type"].as_str() {
-            Some("TEXT") => jouts.push(json!({
-                                         "name": "stdout",
-                                         "output_type": "stream",
-                                         "text": multiline_string_to_lines(o["data"].as_str().unwrap())
-                                       })),
+            Some("TEXT") => {
+                let text = multiline_string_to_lines(o["data"].as_str().unwrap());
+                jouts.push(json!({
+                    "name": "stdout",
+                    "output_type": "stream",
+                    "text": text
+                }))
+            },
             Some(&_) => (),
             None => ()
         }
@@ -80,6 +83,7 @@ fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
     let mut output = optionally_insert_title_node(z);
     let source = multiline_string_to_lines(z["text"].as_str().unwrap());
     let outputs = convert_outputs(z["results"]["msg"].as_array().unwrap_or(&Vec::new()));
+
     output.push(json!({
       "cell_type": "code",
       "execution_count": null,
@@ -87,6 +91,7 @@ fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
       "outputs": outputs,
       "source": source
     }));
+
     output
 }
 
@@ -100,21 +105,16 @@ fn convert_json(z: &ZeppelinJson) -> JupyterJson {
         "cells": jcells,
         "metadata": {
             "kernelspec": {
-            "display_name": "Python 3",
-            "language": "python",
-            "name": "python3"
+                "display_name": "Scala",
+                "language": "scala",
+                "name": "scala"
             },
             "language_info": {
-            "codemirror_mode": {
-                "name": "ipython",
-                "version": 3
-            },
-            "file_extension": ".py",
-            "mimetype": "text/x-python",
-            "name": "python",
-            "nbconvert_exporter": "python",
-            "pygments_lexer": "ipython3",
-            "version": "3.5.5"
+                "file_extension": ".scala",
+                "name": "scala",
+                "nbconvert_exporter": "scala",
+                "pygments_lexer": "scala",
+                "version": null
             }
         },
         "nbformat": 4,

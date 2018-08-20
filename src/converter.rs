@@ -81,19 +81,32 @@ fn convert_outputs(zouts: &ValArray) -> ValArray {
 
 /// Convert a single cell
 fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
-    let mut output = optionally_insert_title_node(z);
-    let source = multiline_string_to_lines(&z["text"]);
-    let outputs = convert_outputs(&z["results"]["msg"]);
+    match z["config"]["editorSetting"]["language"].as_str() {
+        Some("markdown") => {
+            let mut source = multiline_string_to_lines(&z["text"]);
+            source.as_array_mut().unwrap().remove(0);  // skip the "%md" line
+            vec!(json!({
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": source
+            }))
+        },
+        Some(&_) | None => {
+            let mut output = optionally_insert_title_node(z);
+            let source = multiline_string_to_lines(&z["text"]);
+            let outputs = convert_outputs(&z["results"]["msg"]);
 
-    output.push(json!({
-      "cell_type": "code",
-      "execution_count": null,
-      "metadata": {},
-      "outputs": outputs,
-      "source": source
-    }));
+            output.push(json!({
+            "cell_type": "code",
+            "execution_count": null,
+            "metadata": {},
+            "outputs": outputs,
+            "source": source
+            }));
 
-    output
+            output
+        }
+    }
 }
 
 /// Converts a zeppelin json to a jupyter json
@@ -172,5 +185,35 @@ mod tests {
         assert_eq!(outs_vec[0]["name"].as_str(), Some("stdout"));
         assert_eq!(outs_vec[0]["output_type"].as_str(), Some("stream"));
         assert_eq!(outs_vec[0]["text"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn can_convert_markdown_cell() {
+        let md_cell = json!({
+            "text": "%md\n# Hello\nThis is an example **markdown**",
+            "user": "anonymous",
+            "config": {
+                "editorSetting": {
+                    "language": "markdown",
+                },
+            },
+            "settings": {
+                "params": {},
+                "forms": {}
+            },
+            "results": {
+                "code": "SUCCESS",
+                "msg": [{
+                    "type": "HTML",
+                    "data": "doesn't matter"
+                }]
+            }
+        });
+
+        assert_eq!(convert_cell(&md_cell)[0], json!({
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": ["# Hello\n", "This is an example **markdown**"]
+            }));
     }
 }

@@ -1,11 +1,17 @@
 extern crate serde_json;
 extern crate failure;
 
-use self::serde_json::{Value};
+use self::serde_json::Value;
 use std::io::{Read, Write, BufReader, BufWriter};
 use std::fs::File;
 
 use self::failure::Error;
+
+type JupyterJson = Value;
+type ZeppelinJson = Value;
+type JupyterCell = Value;
+type ZeppelinCell = Value;
+
 
 fn read_file(path: &str) -> Result<String, Error> {
     let file = File::open(path)?;
@@ -22,20 +28,70 @@ fn write_file(path: &str, content: &String) -> Result<(), Error> {
     Ok(())
 }
 
+fn optionally_insert_title_node(z: &ZeppelinCell) -> Vec<JupyterCell> {
+    match z["title"].as_str() {
+        Some(title) => {
+            let md_title = "### ".to_string() + title;
+            vec!(json!({
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [Value::String(md_title)]
+                }))
+        },
+        None => Vec::new(),
+    }
+}
+
+/// Convert a single cell
+fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
+    let mut output = optionally_insert_title_node(z);
+    output.push(json!({
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": []
+    }));
+    output
+}
+
 /// Converts a zeppelin json to a jupyter json
-/// 
-/// # Transform rules
-/// 
-/// see `rules.md`
-fn convert_json(z: &Value) -> Value {
-    panic!("Not implmeneted")
+fn convert_json(z: &ZeppelinJson) -> JupyterJson {
+    let zcells = z["paragraphs"].as_array().unwrap();
+    let jcells = Value::Array(zcells.into_iter()
+                             .flat_map(convert_cell)
+                             .collect::<Vec<_>>());
+    json!({
+        "cells": jcells,
+        "metadata": {
+            "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+            },
+            "language_info": {
+            "codemirror_mode": {
+                "name": "ipython",
+                "version": 3
+            },
+            "file_extension": ".py",
+            "mimetype": "text/x-python",
+            "name": "python",
+            "nbconvert_exporter": "python",
+            "pygments_lexer": "ipython3",
+            "version": "3.5.5"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 2
+    })
 }
 
 /// Converts a zeppelin file to a jupyter file
 pub fn convert(src: &str, dst: &str) -> Result<(), Error> {
     let s = read_file(src)?;
     let z = serde_json::from_str(&s)?;
-    let j = serde_json::to_string(&convert_json(&z))?;
+    let j = serde_json::to_string_pretty(&convert_json(&z))?;
     write_file(dst, &j)?;
 
     Ok(())

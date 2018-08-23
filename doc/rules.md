@@ -125,6 +125,8 @@ A typical code cell in Zeppelin is much more complex
 
 From this we can see Zeppelin is much more geared towards collaborative notebook. But for rendering we only just need the source and result. `text` is a single multi-line string of all the sources. The `result.msg` list can contain some different elements. `title` is a special feature of Zeppelin that doesn't have equivelent for Jupyter, the best approximation would be to insert a text cell just before the code cell.
 
+Some node that were created but never evaluated can have no `text` and `results` all together, typically at the end of the notebook.
+
 **TEXT**
 
 It is worth noting that Zeppelin notebook likes to output intermediate results, which gets very verbose.

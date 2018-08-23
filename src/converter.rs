@@ -48,7 +48,7 @@ fn optionally_insert_title_node(z: &ZeppelinCell) -> Vec<JupyterCell> {
 }
 
 fn multiline_string_to_lines(s: &ValString) -> ValArray {
-    let lines: Vec<&str> = s.as_str().unwrap().rsplitn(2, '\n').collect();
+    let lines: Vec<&str> = s.as_str().unwrap_or("").rsplitn(2, '\n').collect();
     let mut s2 = lines.get(1)
                       .map_or(Vec::new(), 
                               |s| s.lines().map(|line| {
@@ -67,43 +67,48 @@ const IMAGE_POSTFIX: &'static str = " style='width=auto;height:auto'><div>\n";
 
 fn convert_codecell_outputs(zouts: &ValArray) -> ValArray {
     let mut jouts = Vec::new();
-    for out in zouts.as_array().unwrap_or(&Vec::new()) {
-        let o = out.as_object().unwrap();
-        match o["type"].as_str() {
-            Some("TEXT") => {
-                let text = multiline_string_to_lines(&o["data"]);
-                jouts.push(json!({
-                    "name": "stdout",
-                    "output_type": "stream",
-                    "text": text
-                }))
-            },
-            Some("HTML") => {
-                // Markdown is ruled out
-                let data = o["data"].as_str().unwrap();
-                if &data[..IMAGE_PREFIX.len()] == IMAGE_PREFIX {
-                    let mut image: String = data.chars().skip(IMAGE_PREFIX.len()).collect();
-                    let newlen = image.len() - IMAGE_POSTFIX.len();
-                    image.truncate(newlen);
+
+    // a code cell can have no outputs
+    if let Some(outputs) = zouts.as_array() {
+        for out in outputs {
+            let o = out.as_object().unwrap();  // ASSUME: .paragraphs[].results.msg[] are all objects
+            match o["type"].as_str() {
+                Some("TEXT") => {
+                    let text = multiline_string_to_lines(&o["data"]);
                     jouts.push(json!({
-                        "data": {
-                            "image/png": Value::String(image),
-                            "text/plain": []
-                        },
-                        "metadata": {},
-                        "output_type": "display_data"
+                        "name": "stdout",
+                        "output_type": "stream",
+                        "text": text
                     }))
+                },
+                Some("HTML") => {
+                    // Markdown is ruled out
+                    let data = o["data"].as_str().unwrap();  // ASSUME: .paragraphs[].results.msg[].data is astring
+                    if &data[..IMAGE_PREFIX.len()] == IMAGE_PREFIX {
+                        let mut image: String = data.chars().skip(IMAGE_PREFIX.len()).collect();
+                        let newlen = image.len() - IMAGE_POSTFIX.len();
+                        image.truncate(newlen);
+                        jouts.push(json!({
+                            "data": {
+                                "image/png": Value::String(image),
+                                "text/plain": []
+                            },
+                            "metadata": {},
+                            "output_type": "display_data"
+                        }))
+                    }
                 }
+                Some(&_) | None => (),
             }
-            Some(&_) | None => (),
         }
     }
+
     Value::Array(jouts)
 }
 
 /// Convert a single cell
 fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
-    match z["config"]["editorSetting"]["language"].as_str() {
+    match z["config"]["editorSetting"]["language"].as_str().or(Some("scala")) {
         Some("markdown") => {
             let mut source = multiline_string_to_lines(&z["text"]);
             source.as_array_mut().unwrap().remove(0);  // skip the "%md" line
@@ -133,7 +138,7 @@ fn convert_cell(z: &ZeppelinCell) -> Vec<JupyterCell> {
 
 /// Converts a zeppelin json to a jupyter json
 fn convert_json(z: &ZeppelinJson) -> JupyterJson {
-    let zcells = z["paragraphs"].as_array().unwrap();
+    let zcells = z["paragraphs"].as_array().unwrap();  // ASSUME: .paragraphs != null
     let jcells = Value::Array(zcells.into_iter()
                              .flat_map(convert_cell)
                              .collect::<Vec<_>>());

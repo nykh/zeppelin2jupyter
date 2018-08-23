@@ -2,7 +2,7 @@ extern crate serde_json;
 extern crate failure;
 
 use self::serde_json::Value;
-use std::io::{Read, Write, BufReader, BufWriter};
+use std::io::{Read, Write, BufRead, BufReader, BufWriter};
 use std::fs::File;
 
 use self::failure::Error;
@@ -18,7 +18,10 @@ type ValString = Value;
 fn read_file(path: &str) -> Result<String, Error> {
     let file = File::open(path)?;
     let mut buf_reader = BufReader::new(file);
-    let mut contents = String::new();
+    let mut contents = String::from("{");
+    // All the Zeppelin file starts with a BOM character
+    let mut _bom = Vec::new();
+    buf_reader.read_until(b'{', &mut _bom).unwrap();  // ASSUME: JSON file contains at least one "{}"
     buf_reader.read_to_string(&mut contents)?;
     Ok(contents)
 }
